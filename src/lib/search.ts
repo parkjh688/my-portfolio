@@ -16,7 +16,8 @@ function cosine(a: Float32Array, b: Float32Array): number {
  * @param k 반환 개수 (기본값 5)
  */
 export function topK(qv: Float32Array, k = 5): SearchHit[] {
-  const { ids, vecs } = getIndex(); // index-store.ts에서 반환한 IndexStore 기반
+  const { ids, embeddings } = getIndex();            // ✅ embeddings 사용
+  const vecs = embeddings.map((row) => Float32Array.from(row)); // ✅ 변환
 
   const scored: SearchHit[] = ids.map((id, i) => {
     const s = cosine(qv, vecs[i]);

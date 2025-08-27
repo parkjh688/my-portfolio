@@ -44,3 +44,22 @@ export async function embed(text: string, endpoint = "/api/embed"): Promise<numb
   const payload = (await r.json()) as unknown as EmbedAPIResponse | unknown;
   return parseEmbedding(payload);
 }
+
+export async function embedQuery(text: string): Promise<Float32Array> {
+  const res = await fetch("/api/embed", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Embedding API error: ${res.status}`);
+  }
+
+  const payload = await res.json();
+  const arr: number[] = Array.isArray(payload)
+    ? payload
+    : payload.data || payload.embedding;
+
+  return Float32Array.from(arr);
+}
