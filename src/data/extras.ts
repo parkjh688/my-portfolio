@@ -11,8 +11,8 @@ export type Publication = {
 export type Talk = {
   title: string;
   event: string;
-  year?: string;     // "2024-01"처럼 써도 OK
-  role?: "Speaker" | "Panel" | "Host" | "Workshop" | "Organizer";
+  year?: string; // "2024-01"처럼 써도 OK
+  role?: "Speaker" | "Panel" | "Host" | "Workshop" | "Organizer" | "Contributor";
   href?: string;
   tags?: string[];
   note?: string;
