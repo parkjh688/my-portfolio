@@ -4,17 +4,25 @@
 import { useEffect, useRef, useState } from "react";
 
 /* ========= Persona ========= */
-// 언어별 이름 고정 (원하면 .env에 NEXT_PUBLIC_PERSONA_KO, NEXT_PUBLIC_PERSONA_EN 지정)
 const PERSONA_KO = process.env.NEXT_PUBLIC_PERSONA_KO || "정현";
 const PERSONA_EN = process.env.NEXT_PUBLIC_PERSONA_EN || "Junghyun";
 
-/* ========= Utils ========= */
+/* ========= Type guards / helpers ========= */
 function isKorean(s: string) {
   return /[ㄱ-ㅎ가-힣]/.test(s);
 }
 function nameForQuestion(q: string) {
   return isKorean(q) ? PERSONA_KO : PERSONA_EN;
 }
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return !!x && typeof x === "object";
+}
+function messageFrom(e: unknown): string {
+  return isRecord(e) && typeof (e as { message?: unknown }).message === "string"
+    ? (e as { message: string }).message
+    : String(e);
+}
+
 function cosine(a: Float32Array, b: Float32Array) {
   let s = 0;
   for (let i = 0; i < a.length; i++) s += a[i] * b[i];
@@ -30,11 +38,18 @@ function l2normFloat32(v: Float32Array) {
 function toFloat32(x: number[] | Float32Array): Float32Array {
   return x instanceof Float32Array ? x : Float32Array.from(x);
 }
-function parseEmbeddingPayload(payload: any): number[] {
+function parseEmbeddingPayload(payload: unknown): number[] {
   // 허용: number[] | {data:number[]} | {embedding:number[]} | {dim, embedding:number[]}
-  if (Array.isArray(payload)) return payload as number[];
-  if (payload && Array.isArray(payload.data)) return payload.data as number[];
-  if (payload && Array.isArray(payload.embedding)) return payload.embedding as number[];
+  if (Array.isArray(payload)) {
+    // number[] 인지 확인
+    if (payload.every((n) => typeof n === "number")) return payload as number[];
+  }
+  if (isRecord(payload) && Array.isArray(payload.data) && payload.data.every((n) => typeof n === "number")) {
+    return payload.data as number[];
+  }
+  if (isRecord(payload) && Array.isArray(payload.embedding) && payload.embedding.every((n) => typeof n === "number")) {
+    return payload.embedding as number[];
+  }
   throw new Error("Embedding API returned wrong shape");
 }
 
@@ -43,19 +58,19 @@ type IndexMem = {
   ids: string[];
   titles: string[];
   texts: string[];
-  meta: any[];
+  meta: Record<string, unknown>[];
   vecs: Float32Array[];
   dim: number;
 };
 
-const logErr = (err: any) =>
+const logErr = (err: unknown) =>
   (process.env.NODE_ENV !== "production" ? console.warn : console.error)(err);
 
 /* ========= Component ========= */
 export default function AgentClient() {
   const [q, setQ] = useState<string>("");
   const [a, setA] = useState<string>("");
-  const [hits, setHits] = useState<Hit[]>([]); // 실제로 사용한 컨텍스트만 노출
+  const [hits, setHits] = useState<Hit[]>([]);
   const [status, setStatus] = useState<string>("idle");
   const [index, setIndex] = useState<IndexMem | null>(null);
   const didInitIndex = useRef(false);
@@ -70,32 +85,30 @@ export default function AgentClient() {
         setStatus("loading index…");
 
         const PREFIX = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-        const fetchJSON = async (path: string) => {
+        const fetchJSON = async <T,>(path: string): Promise<T> => {
           const url = `${PREFIX}${path}`;
           const r = await fetch(url);
           if (!r.ok) throw new Error(`HTTP ${r.status} @ ${url}`);
-          return r.json();
+          return (await r.json()) as T;
         };
 
         const [ids, titles, texts, meta, mat] = await Promise.all([
-          fetchJSON("/index/ids.json"),
-          fetchJSON("/index/titles.json"),
-          fetchJSON("/index/texts.json"),
-          fetchJSON("/index/meta.json"),
-          fetchJSON("/index/embeddings.json"),
+          fetchJSON<string[]>("/index/ids.json"),
+          fetchJSON<string[]>("/index/titles.json"),
+          fetchJSON<string[]>("/index/texts.json"),
+          fetchJSON<Record<string, unknown>[]>("/index/meta.json"),
+          fetchJSON<number[][]>("/index/embeddings.json"),
         ]);
 
         const dim = mat[0].length;
-        const vecs = (mat as number[][]).map((row) =>
-          l2normFloat32(Float32Array.from(row))
-        );
+        const vecs = mat.map((row) => l2normFloat32(Float32Array.from(row)));
 
         setIndex({ ids, titles, texts, meta, vecs, dim });
         setStatus("ready");
       } catch (err) {
         logErr(err);
         setStatus("index load error");
-        setA("인덱스 로드 오류: " + String((err as any)?.message ?? err ?? ""));
+        setA("인덱스 로드 오류: " + messageFrom(err));
       }
     })();
   }, []);
@@ -125,30 +138,31 @@ export default function AgentClient() {
       if (!embedResponse.ok) {
         let errText = await embedResponse.text();
         try {
-          const errJson = JSON.parse(errText);
-          errText = errJson?.error || errText;
+          const errJson = JSON.parse(errText) as unknown;
+          if (isRecord(errJson) && typeof errJson.error === "string") {
+            errText = errJson.error;
+          }
         } catch {}
         throw new Error(`임베딩 API 오류 (${embedResponse.status}): ${errText}`);
       }
 
-      const payload = await embedResponse.json();
+      const payload: unknown = await embedResponse.json();
       const vec = parseEmbeddingPayload(payload);
       const qv = l2normFloat32(toFloat32(vec));
 
-      // 2) 검색 (Top-8 뽑고 → 질문 주제에 맞는 것만 필터 → 최상위 1개만 사용)
+      // 2) 검색 (Top-8 → 주제 필터 → 최상위 1개)
       setStatus("searching…");
       const scored = index.ids
         .map((_, i) => ({ i, s: cosine(qv, index.vecs[i]) }))
         .sort((a, b) => b.s - a.s);
 
-      const top8 = scored.slice(0, 8).map(({ i, s }) => ({
+      const top8: Hit[] = scored.slice(0, 8).map(({ i, s }) => ({
         id: index.ids[i],
         title: index.titles[i],
         text: index.texts[i],
         score: s,
       }));
 
-      // 주제 필터 (질문 의도와 무관한 문서 제거: 예) 영화 질문에서 장소 문서 제외)
       const qLower = qClean.toLowerCase();
       const topicRules = [
         { name: "movie", re: /(movie|film|영화|픽사|디즈니|마블|스파이더|애니)/i },
@@ -157,9 +171,7 @@ export default function AgentClient() {
         { name: "place", re: /(place|장소|사는|거주|도시|지역|surry|surry hills|sydney|호주)/i },
         { name: "music", re: /(music|노래|가수|song|artist)/i },
       ];
-      const activeTopics = topicRules
-        .filter((t) => t.re.test(qLower))
-        .map((t) => t.name);
+      const activeTopics = topicRules.filter((t) => t.re.test(qLower)).map((t) => t.name);
 
       function topicOf(h: Hit): string {
         const b = (h.id + " " + h.title + " " + h.text).toLowerCase();
@@ -174,22 +186,19 @@ export default function AgentClient() {
       let relevant = top8;
       if (activeTopics.length) {
         relevant = top8.filter((h) => activeTopics.includes(topicOf(h)));
-        // 필터 결과가 비면 최상위 1개라도 보존
         if (!relevant.length) relevant = [top8[0]];
       }
 
-      // 최상위 1개만 사용 (의도적으로 과잉 정보 제거)
       const used = [relevant[0]];
       setHits(used);
 
-      // 3) 컨텍스트 구성 (항상 RAG 사용)
+      // 3) 컨텍스트 구성
       const blocks = used.map(
-        (t, idx) =>
-          `[${idx + 1}] ${t.title} | ${t.id} | score=${t.score.toFixed(3)}\n${t.text}`
+        (t, idx) => `[${idx + 1}] ${t.title} | ${t.id} | score=${t.score.toFixed(3)}\n${t.text}`
       );
       const context = blocks.join("\n\n");
 
-      // 4) 프롬프트 (항상 3인칭 이름 사용 + 언어 고정)
+      // 4) 프롬프트
       const NAME = nameForQuestion(qClean);
       const langLine = isKorean(qClean) ? "Answer in Korean only." : "Answer in English only.";
       const ragPrompt = `You are the agent for ${NAME}.
@@ -217,16 +226,20 @@ Answer:`;
       if (!generateResponse.ok) {
         let errText = await generateResponse.text();
         try {
-          const errJson = JSON.parse(errText);
-          errText = errJson?.error || errText;
+          const errJson = JSON.parse(errText) as unknown;
+          if (isRecord(errJson) && typeof errJson.error === "string") {
+            errText = errJson.error;
+          }
         } catch {}
         throw new Error(`생성 API 오류 (${generateResponse.status}): ${errText}`);
       }
 
-      const gen = await generateResponse.json();
-      let text: string = gen?.text || "";
+      const gen: unknown = await generateResponse.json();
+      let text =
+        isRecord(gen) && typeof (gen as { text?: unknown }).text === "string"
+          ? (gen as { text: string }).text
+          : "";
 
-      // 응답 정리 & 디스클레이머 제거
       if (text.includes("Answer:")) text = text.split("Answer:").pop()?.trim() || text;
       text = text
         .replace(/(^|\n)\s*As an AI language model[^\n\.]*[\.\n]?/gi, "")
@@ -235,9 +248,9 @@ Answer:`;
 
       setA(text || "(응답을 생성할 수 없습니다)");
       setStatus("done");
-    } catch (err) {
+    } catch (err: unknown) {
       logErr(err);
-      setA("오류: " + String((err as any)?.message ?? err ?? ""));
+      setA("오류: " + messageFrom(err));
       setStatus("error");
     }
   }
@@ -272,7 +285,6 @@ Answer:`;
         </div>
       )}
 
-      {/* 실제 사용한 컨텍스트만 표시 */}
       {hits.length > 0 && status === "done" && (
         <div className="mt-4 rounded-lg bg-gray-50 dark:bg-gray-900/50 p-3 text-xs text-gray-600 dark:text-gray-400">
           <div className="mb-1 font-medium">Sources</div>
@@ -285,12 +297,6 @@ Answer:`;
           </ul>
         </div>
       )}
-
-      {/* 디버그 정보 */}
-      {/* <div className="mt-4 text-xs text-gray-400">
-        <div>Index loaded: {index ? "✅" : "❌"}</div>
-        <div>Index size: {index?.ids?.length || 0} documents</div>
-      </div> */}
     </div>
   );
 }
