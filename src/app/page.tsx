@@ -1,103 +1,107 @@
-import Image from "next/image";
+// src/app/page.tsx
+import Link from "next/link";
+import ProjectCard from "@/components/ProjectCard";
+import { projects } from "@/data/projects";
+import GalleryCard from "@/components/GalleryCard";
+import MiniInfoCard from "@/components/MiniInfoCard";
+import { publications, talks } from "@/data/extras";
+import AgentClient from "@/components/AgentClient";
+
 
 export default function Home() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <main className="mx-auto max-w-5xl px-6 py-10">
+      <header className="mb-10">
+        <h1 className="text-3xl font-bold">Junghyun Park — ML Engineer</h1>
+        <p className="mt-2 text-gray-600">
+          Multimodal LLM · Image Retrieval · Vision & Text Analysis · Generative AI
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <Link href="mailto:parkjh688@gmail.com" className="underline">Email</Link>
+          <Link href="https://www.linkedin.com/in/junghyun-eden/" className="underline" target="_blank">LinkedIn</Link>
+          <Link href="/resume.pdf" className="underline">Resume (PDF)</Link>
+          <span className="inline-flex items-center gap-1 text-gray-500">
+            <span className="leading-none">📍</span>
+            <span>Based in Sydney</span>
+          </span>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+      </header>
+
+      {/* 소개 섹션: 왼쪽(프로필) + 오른쪽(에이전트) */}
+      <section className="mb-10 flex items-stretch gap-6">
+        <div className="w-[320px]">
+          <GalleryCard
+            title="Hello, I'm Junghyun"
+            images={[
+              { src: "/profile/me1.jpeg", alt: "Profile 1" },
+              { src: "/profile/me2.jpeg", alt: "Profile 2" },
+              { src: "/profile/me3.jpeg", alt: "Profile 3" },
+            ]}
+            caption={
+              <>
+                <span className="font-semibold">Half ML engineer, half pizza critic,</span>
+                <span className="block font-bold uppercase">full-time animal friend!</span>
+              </>
+            }
+            size={200}
+            rounded="rounded-xl"
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+        </div>
+
+        {/* 오른쪽: 에이전트 영역 */}
+        <div className="flex-1 rounded-2xl border p-5">
+          <h3 className="text-lg font-semibold">Chat Agent</h3>
+          <p className="mt-1 text-sm text-gray-600">
+            (브라우저에서 로컬 추론). 페이지 진입 시 모델을 미리 다운로드합니다.
+          </p>
+
+          {/* ✅ 여기서만 AgentClient를 클라이언트로 렌더 */}
+          <div className="mt-3">
+            <AgentClient />
+          </div>
+        </div>
+      </section>
+
+      {/* 아래: 프로젝트 */}
+      <h2 className="mb-4 text-lg font-semibold">Projects</h2>
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {projects.map((p) => (
+          <ProjectCard key={p.slug} p={p} />
+        ))}
+      </section>
+
+      <section className="mt-12">
+        <h2 className="mb-4 text-lg font-semibold">Publications</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {publications.map((p) => (
+            <MiniInfoCard
+              key={p.title}
+              title={p.title}
+              meta={p.venue}
+              right={p.year}
+              href={p.href}
+              tags={p.tags}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-12">
+        <h2 className="mb-4 text-lg font-semibold">Talks & Events</h2>
+        <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2">
+          {talks.map((t) => (
+            <MiniInfoCard
+              key={`${t.event}-${t.title}-${t.year}`}
+              title={t.title}
+              meta={`${t.event}${t.role ? ` · ${t.role}` : ""}`}
+              right={t.year}
+              href={t.href}
+              tags={t.tags}
+              note={t.note}
+            />
+          ))}
+        </div>
+      </section>
+    </main>
   );
 }
