@@ -1,18 +1,46 @@
 // src/lib/embed.ts
-import { pipeline } from "@xenova/transformers";
+import { isRecord } from "@/lib/types";
 
-let embedder: any;
-export async function embedQuery(q: string) {
-  if (!embedder) {
-    embedder = await pipeline("feature-extraction", "Xenova/multilingual-e5-small");
+/** API가 돌려줄 수 있는 임베딩 응답 모양들 */
+type EmbedAPIResponse =
+  | number[]
+  | { data: number[] }
+  | { embedding: number[] }
+  | { dim?: number; embedding: number[] };
+
+function parseEmbedding(x: unknown): number[] {
+  // number[]
+  if (Array.isArray(x) && x.every((n) => typeof n === "number")) return x as number[];
+
+  // { data: number[] }
+  if (isRecord(x) && Array.isArray(x.data) && x.data.every((n) => typeof n === "number")) {
+    return x.data as number[];
   }
-  // e5 규칙: 쿼리는 "query: " 접두사
-  const out = await embedder("query: " + q, {
-    pooling: "mean",     // ★ 토큰 평균 풀링을 내부에서 수행
-    normalize: true      // ★ L2 정규화도 내부에서
-  });
 
-  // out은 보통 Tensor(1, D) 형태. data가 벡터 하나다.
-  const data: Float32Array = out.data ?? out; // 일부 버전은 바로 Float32Array
-  return new Float32Array(data); // 길이 384가 되어야 정상
+  // { embedding: number[] } | { dim?: number; embedding: number[] }
+  if (isRecord(x) && Array.isArray(x.embedding) && x.embedding.every((n) => typeof n === "number")) {
+    return x.embedding as number[];
+  }
+
+  throw new Error("Invalid embedding response shape");
+}
+
+/** 서버 라우트(/api/embed)를 호출해 임베딩을 받아온다. */
+export async function embed(text: string, endpoint = "/api/embed"): Promise<number[]> {
+  const r = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!r.ok) {
+    let msg = await r.text();
+    try {
+      const j = JSON.parse(msg) as unknown;
+      if (isRecord(j) && typeof j.error === "string") msg = j.error;
+    } catch {}
+    throw new Error(`Embedding API ${r.status}: ${msg}`);
+  }
+
+  const payload = (await r.json()) as unknown as EmbedAPIResponse | unknown;
+  return parseEmbedding(payload);
 }
